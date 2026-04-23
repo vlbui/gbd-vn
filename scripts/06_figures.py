@@ -672,10 +672,10 @@ def fig6_yll_yld_trends(df_yll_yld):
     ratio = yll / yld
     fig.add_trace(go.Scatter(
         x=ratio.index, y=ratio.values,
-        mode="lines+markers", name="YLL/YLD ratio",
+        mode="lines+markers", name="YLL to YLD ratio",
         line=dict(color=LANCET_INK, width=2.5),
         marker=dict(size=7, color=LANCET_INK),
-        hovertemplate="Year: %{x}<br>YLL/YLD: %{y:.2f}<extra></extra>",
+        hovertemplate="Year: %{x}<br>YLL:YLD = %{y:.2f}<extra></extra>",
     ), row=1, col=2)
     fig.add_hline(y=1, line_dash="dash", line_color=LANCET_INK,
                   line_width=0.8, row=1, col=2,
@@ -691,7 +691,7 @@ def fig6_yll_yld_trends(df_yll_yld):
                     bgcolor="rgba(255,255,255,0)"),
     )
     fig.update_yaxes(title_text="Rate per 100,000", row=1, col=1)
-    fig.update_yaxes(title_text="YLL/YLD ratio", row=1, col=2)
+    fig.update_yaxes(title_text="YLL to YLD ratio", row=1, col=2)
     fig.update_xaxes(title_text="Year", row=1, col=1)
     fig.update_xaxes(title_text="Year", row=1, col=2)
     save_fig(fig, "fig6_yll_yld_trends", width=1100, height=520)
@@ -716,7 +716,7 @@ def fig7_sea_yll_yld(df_ratio):
         customdata=df[["yll_rate", "yld_rate"]].values,
         hovertemplate=(
             "<b>%{y}</b><br>"
-            "YLL/YLD ratio: %{x:.2f}<br>"
+            "YLL:YLD = %{x:.2f}<br>"
             "YLL rate: %{customdata[0]:,.0f}<br>"
             "YLD rate: %{customdata[1]:,.0f}<extra></extra>"
         ),
@@ -730,7 +730,7 @@ def fig7_sea_yll_yld(df_ratio):
         fig,
         title="<b>Figure 7 - YLL/YLD ratio by country, Southeast Asia 2023</b>",
         title_subtitle="Age-standardized, all causes; Vietnam highlighted",
-        xaxis_title="YLL/YLD ratio", yaxis_title="",
+        xaxis_title="YLL to YLD ratio", yaxis_title="",
         width=750, height=520,
     )
     fig.update_xaxes(range=[0, float(df["ratio"].max()) * 1.2])
