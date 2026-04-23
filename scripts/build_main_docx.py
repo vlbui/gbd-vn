@@ -20,18 +20,16 @@ from md_to_docx import md_to_docx
 from utils import PROJECT_ROOT, FIG_STATIC
 
 
-# Main-manuscript figure labels -> PNG. The 9 figures embedded are 1-7, 9,
-# 10 (Figure 8 is the CMNN sensitivity and lives in the supplement only).
+# Main-manuscript figure labels -> PNG. Five figures now: overview,
+# Das Gupta decomposition, SEA NCD-share comparison, merged 30q70
+# (Vietnam trajectory + SEA ranking), age-sex pyramid. YLL/YLD panels and
+# CMNN-sensitivity moved to the supplement.
 FIG_PNGS = {
     "1":  FIG_STATIC / "fig1_overview.png",
-    "2":  FIG_STATIC / "fig2_heatmap.png",
-    "3":  FIG_STATIC / "fig3_decomposition.png",
-    "4":  FIG_STATIC / "fig4_sea_comparison.png",
+    "2":  FIG_STATIC / "fig3_decomposition.png",
+    "3":  FIG_STATIC / "fig4_sea_comparison.png",
+    "4":  FIG_STATIC / "fig4_30q70_combined.png",
     "5":  FIG_STATIC / "fig5_age_sex_pyramid.png",
-    "6":  FIG_STATIC / "fig6_yll_yld_trends.png",
-    "7":  FIG_STATIC / "fig7_sea_yll_yld.png",
-    "9":  FIG_STATIC / "fig9_30q70_vietnam.png",
-    "10": FIG_STATIC / "fig10_sea_ncd_premature.png",
 }
 
 

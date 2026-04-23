@@ -80,33 +80,57 @@ CAUSE_SHORT = {
 
 # --- Plotly styling ---------------------------------------------------------
 
+# ggsci Lancet ("lanonc") qualitative palette. Enforced repo-wide so every
+# figure shares a consistent, journal-compatible colour grammar.
+LANCET = ["#00468B", "#ED0000", "#42B540", "#0099B4", "#925E9F",
+          "#FDAF91", "#AD002A", "#ADB6B6", "#1B1919"]
+LANCET_CMNN    = "#00468B"   # dark blue
+LANCET_NCD     = "#ED0000"   # red
+LANCET_INJURY  = "#42B540"   # green
+LANCET_YLL     = "#925E9F"   # purple
+LANCET_YLD     = "#0099B4"   # teal
+LANCET_VIETNAM = "#ED0000"   # focal-country highlight
+LANCET_PEER    = "#ADB6B6"   # peer-country grey
+LANCET_INK     = "#1B1919"   # axes / text
+LANCET_MUTED   = "#FDAF91"   # non-significant / historical
+
+# Semantic palette used throughout figure builders. Preserves the original
+# keys (cmnn/ncd/injuries/yll/yld/vietnam/grid) so existing call sites resolve
+# cleanly against the Lancet colour space.
 PALETTE = {
-    "cmnn":     "#E63946",
-    "ncd":      "#1D3557",
-    "injuries": "#F4A261",
-    "yll":      "#6A4C93",
-    "yld":      "#1982C4",
-    "vietnam":  "#E63946",
-    "grid":     "#F0F0F0",
+    "cmnn":     LANCET_CMNN,
+    "ncd":      LANCET_NCD,
+    "injuries": LANCET_INJURY,
+    "yll":      LANCET_YLL,
+    "yld":      LANCET_YLD,
+    "vietnam":  LANCET_VIETNAM,
+    "peer":     LANCET_PEER,
+    "ink":      LANCET_INK,
+    "muted":    LANCET_MUTED,
+    "grid":     "#888888",
 }
 
+FONT_FAMILY = "Helvetica, Arial, sans-serif"
+
 BASE_LAYOUT = dict(
-    font=dict(family="Arial, Helvetica, sans-serif", size=11, color="#222222"),
+    font=dict(family=FONT_FAMILY, size=11, color=LANCET_INK),
     paper_bgcolor="white",
     plot_bgcolor="white",
     margin=dict(l=60, r=30, t=50, b=60),
     legend=dict(
-        bgcolor="rgba(255,255,255,0.9)",
-        bordercolor="#CCCCCC",
-        borderwidth=1,
-        font=dict(size=10),
+        bgcolor="rgba(255,255,255,0)",
+        bordercolor="rgba(0,0,0,0)",
+        borderwidth=0,
+        font=dict(family=FONT_FAMILY, size=9, color=LANCET_INK),
     ),
     xaxis=dict(
-        showgrid=True, gridcolor=PALETTE["grid"],
+        showgrid=True, gridcolor=PALETTE["grid"], gridwidth=0.5,
+        griddash="dash",
         showline=True, linecolor="#333333", linewidth=0.8, mirror=True,
     ),
     yaxis=dict(
-        showgrid=True, gridcolor=PALETTE["grid"],
+        showgrid=True, gridcolor=PALETTE["grid"], gridwidth=0.5,
+        griddash="dash",
         showline=True, linecolor="#333333", linewidth=0.8, mirror=True,
     ),
 )
@@ -132,6 +156,87 @@ def apply_panel_border(fig):
     # every one at once, including those created by make_subplots.
     fig.update_xaxes(**_PANEL_BORDER)
     fig.update_yaxes(**_PANEL_BORDER)
+    return fig
+
+
+def apply_lancet_style(fig):
+    """Enforce Lancet/ggsci-style typography, gridlines and line weights.
+
+    Print-crisp defaults (tuned for 300 dpi export at typical Word/PDF
+    page scale):
+      - Font family: Helvetica, Arial, sans-serif
+      - Base font 14 pt (paragraph runs in legend/hover)
+      - Axis titles 15 pt, tick labels 13 pt, legend 12 pt no frame
+      - In-plot annotations 13 pt (unless explicitly set larger)
+      - Primary data lines >= 1.5 pt
+      - Gridlines 0.5 pt, dashed, #888888 at alpha 0.3
+      - Axis lines 1.0 pt #333333, ticks outside, ticklen 5
+      - Ink colour #1B1919 for axes/text
+
+    Margin is intentionally NOT set here so per-figure overrides
+    (forest plot, merged 30q70, etc.) survive.
+    """
+    grid_rgba = "rgba(136,136,136,0.3)"
+    axis_kw = dict(
+        gridcolor=grid_rgba, gridwidth=0.5, griddash="dash",
+        linecolor="#333333", linewidth=1.0,
+        mirror=True, ticks="outside", ticklen=5,
+        zerolinecolor="#888888", zerolinewidth=0.8,
+        tickfont=dict(family=FONT_FAMILY, size=13, color=LANCET_INK),
+        title=dict(font=dict(family=FONT_FAMILY, size=15,
+                             color=LANCET_INK)),
+    )
+    fig.update_xaxes(**axis_kw)
+    fig.update_yaxes(**axis_kw)
+    fig.update_layout(
+        font=dict(family=FONT_FAMILY, size=14, color=LANCET_INK),
+        title=None,
+        legend=dict(
+            bgcolor="rgba(255,255,255,0)",
+            bordercolor="#333333", borderwidth=0,
+            font=dict(family=FONT_FAMILY, size=12, color=LANCET_INK),
+        ),
+    )
+    # Annotations: keep any explicit larger size (panel letters at 16 pt
+    # etc.), but force small/default annotations up to 13 pt ink.
+    for ann in (fig.layout.annotations or []):
+        existing = getattr(ann, "font", None)
+        existing_size = None
+        if existing is not None:
+            try:
+                existing_size = existing.size
+            except Exception:
+                existing_size = None
+        ann.font = dict(
+            family=FONT_FAMILY,
+            size=existing_size if existing_size and existing_size >= 13 else 13,
+            color=LANCET_INK,
+        )
+    # Promote primary trace line widths up to 1.5 pt. Leave narrower
+    # construction lines (stack outlines at 0.5) and any width >= 1.5 alone.
+    for tr in fig.data:
+        line = getattr(tr, "line", None)
+        if line is None:
+            continue
+        try:
+            w = line.width
+        except Exception:
+            w = None
+        if w is not None and 0.9 < float(w) < 1.5:
+            tr.update(line=dict(width=1.5))
+    # Reference shape lines: ensure dashed/dotted stay thin at 0.8 pt.
+    shapes = list(fig.layout.shapes or [])
+    new_shapes = []
+    for s in shapes:
+        try:
+            dash = getattr(s.line, "dash", None)
+        except Exception:
+            dash = None
+        if dash in ("dash", "dot", "dashdot", "longdash", "longdashdot"):
+            s.line.width = 0.8
+        new_shapes.append(s)
+    if new_shapes:
+        fig.update_layout(shapes=new_shapes)
     return fig
 
 
@@ -491,12 +596,13 @@ def save_fig(fig, name, width=900, height=600):
     """
     ensure_dirs()
     strip_figure_titles(fig)
+    apply_lancet_style(fig)
     apply_panel_border(fig)
     fig.write_html(FIG_HTML / f"{name}.html", include_plotlyjs="cdn")
-    # scale=2 on Plotly's 72-dpi base gives a 144-dpi PNG. We bump to 2.78
-    # to land on ~200 dpi effective, matching the task spec.
+    # 300 dpi PNG: scale = 300/72 on Plotly's 72-dpi base. Needed for crisp
+    # axis/text rendering at typical Lancet / Word print size.
     fig.write_image(FIG_STATIC / f"{name}.png",
-                    width=width, height=height, scale=200 / 72)
+                    width=width, height=height, scale=300 / 72)
     fig.write_image(FIG_STATIC / f"{name}.svg",
                     width=width, height=height)
     print(f"  [ok] saved: figures/html/{name}.html + static/{name}.png/.svg")

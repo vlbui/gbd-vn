@@ -18,7 +18,12 @@ from utils import PROJECT_ROOT, FIG_STATIC
 
 
 SUPP_FIG_PNGS = {
-    "S4": FIG_STATIC / "fig8_cmnn_sensitivity.png",
+    # S3: Vietnam YLL vs YLD trends (was main-text Figure 6)
+    "S3": FIG_STATIC / "fig6_yll_yld_trends.png",
+    # S4: SEA YLL/YLD ratio ranking 2023 (was main-text Figure 7)
+    "S4": FIG_STATIC / "fig7_sea_yll_yld.png",
+    # S5: CMNN split sensitivity (was main-text Figure 8)
+    "S5": FIG_STATIC / "fig8_cmnn_sensitivity.png",
 }
 
 

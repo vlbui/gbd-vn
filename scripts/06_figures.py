@@ -5,19 +5,18 @@ Figures:
                              A absolute DALYs, B % composition,
                              C age-std rate + 95% UI,
                              D NCD share of total DALYs over time
-  fig2_heatmap             Top-15 Vietnam cause heatmap (relative to 1990)
+  fig2_period_aapc         Period-stratified AAPC forest plot for the five
+                             headline Vietnam indicators (CMNN / NCD / Injury
+                             DALY rate + YLL + YLD rate), four time windows
   fig3_decomposition       NCD + CMNN Das Gupta waterfall
   fig4_sea_comparison      SEA NCD-share trajectories + SDI-vs-share scatter
   fig5_age_sex_pyramid     1990 vs 2023 age-sex DALY pyramid
-  fig6_yll_yld_trends      Vietnam YLL/YLD rate + ratio
-  fig7_sea_yll_yld         SEA YLL/YLD ratio bar ranking
+  fig6_yll_yld_trends      Vietnam YLL/YLD rate + ratio (moved to supplement)
+  fig7_sea_yll_yld         SEA YLL/YLD ratio bar ranking (moved to supplement)
   fig8_cmnn_sensitivity    Main vs CMNN-split sensitivity side-by-side
-  fig9_30q70_vietnam       Vietnam 30q70 NCD vs CMNN probability
-                             (WHO SDG 3.4.1, 1990-2023)
-  fig10_sea_ncd_premature  SEA age-standardized NCD death rate 2023 ranking
-                             (premature-mortality proxy for cross-country
-                              comparison; Vietnam-level 30q70 not available
-                              for other SEA countries)
+  fig4_30q70_combined      Two-panel merged figure: Vietnam 30q70 trajectory
+                             (broad GBD NCD + CMNN + SDG 3.4 target) and SEA
+                             2023 strict SDG 3.4.1 ranking with 1990 overlay
 """
 
 import sys
@@ -33,6 +32,9 @@ from plotly.subplots import make_subplots
 from utils import (
     PROC, TAB, SEA_COUNTRIES, PALETTE, BASE_LAYOUT,
     CAUSE_GROUPS, CAUSE_SHORT, MEASURE,
+    LANCET, LANCET_CMNN, LANCET_NCD, LANCET_INJURY,
+    LANCET_YLL, LANCET_YLD, LANCET_VIETNAM, LANCET_PEER,
+    LANCET_INK, LANCET_MUTED,
     ensure_dirs, save_fig,
 )
 
@@ -167,8 +169,8 @@ def fig1_overview(df_burden, metrics):
         legendgroup="ncdshare",
         hovertemplate="%{x}: NCD share = %{y:.2f}%<extra></extra>",
     ), row=2, col=2)
-    fig.add_hline(y=50, line_dash="dot", line_color="#888888",
-                  row=2, col=2,
+    fig.add_hline(y=50, line_dash="dot", line_color=LANCET_INK,
+                  line_width=0.8, row=2, col=2,
                   annotation_text="50% reference",
                   annotation_position="bottom right")
 
@@ -190,58 +192,102 @@ def fig1_overview(df_burden, metrics):
 
 
 # ---------------------------------------------------------------------------
-# Figure 2 - heatmap of top-15 Vietnam causes
+# Figure 2 - period-stratified AAPC forest plot
 # ---------------------------------------------------------------------------
 
-def fig2_heatmap():
-    q2a = pd.read_csv(PROC / "cmnn_vietnam.csv")
-    q2b = pd.read_csv(PROC / "ncd_vietnam.csv")
-    det = pd.concat([q2a, q2b], ignore_index=True)
-    det = det[(det["measure_name"] == MEASURE["daly"])
-              & (det["metric_name"] == "Rate")
-              & (det["age_name"] == "Age-standardized")
-              & (det["sex_name"] == "Both")
-              & (~det["cause_name"].isin(
-                  [CAUSE_GROUPS["cmnn"], CAUSE_GROUPS["ncd"]]))]
+def build_fig2_period_aapc():
+    """Dot-and-whisker (forest) plot of period-stratified AAPC for the five
+    headline Vietnam indicators (CMNN / NCD / Injuries DALY rate + all-cause
+    YLL rate + all-cause YLD rate), each shown for four time windows:
+    1990-2023 (full), 1990-2000, 2000-2010, 2010-2023.
 
-    latest = det[det["year"] == 2023]
-    top15 = (latest.sort_values("val", ascending=False)
-             .drop_duplicates("cause_name")["cause_name"].head(15).tolist())
+    Filled marker = p < 0.05 (significant change); open marker = p >= 0.05.
+    """
+    trend = pd.read_csv(TAB / "trend_results.csv")
 
-    years = [1990, 1995, 2000, 2005, 2010, 2015, 2020, 2023]
-    mat = (det[det["cause_name"].isin(top15) & det["year"].isin(years)]
-           .pivot_table(index="cause_name", columns="year", values="val")
-           .reindex(top15))
-    rel = mat.div(mat[1990], axis=0)
+    # Row order (top -> bottom) and display labels.
+    row_spec = [
+        ("DALY - CMNN",            "CMNN rate"),
+        ("DALY - NCD",             "NCD rate"),
+        ("DALY - Injuries",        "Injury rate"),
+        ("YLL rate - All causes",  "YLL rate"),
+        ("YLD rate - All causes",  "YLD rate"),
+    ]
+    row_keys  = [r[0] for r in row_spec]
+    row_names = [r[1] for r in row_spec]
+    row_idx = {k: i for i, (k, _) in enumerate(row_spec)}
 
-    def _wrap(s, maxw=45):
-        return s if len(s) <= maxw else s[:maxw - 1] + "..."
+    # Window colour + vertical offset (dodge within a row).
+    window_spec = [
+        ("1990-2023", LANCET_INK,  +0.30),
+        ("1990-2000", LANCET[0],   +0.10),
+        ("2000-2010", LANCET[1],   -0.10),
+        ("2010-2023", LANCET[2],   -0.30),
+    ]
 
-    # Annotation text = absolute rate (rounded)
-    z = rel.values
-    text = np.vectorize(lambda v: "" if np.isnan(v) else f"{v:.0f}")(mat.values)
-    vmax = float(np.nanmax(np.abs(z - 1)))
+    fig = go.Figure()
 
-    fig = go.Figure(go.Heatmap(
-        z=z, x=[str(y) for y in years],
-        y=[_wrap(c) for c in top15],
-        colorscale="RdBu_r",
-        zmin=1 - vmax, zmax=1 + vmax, zmid=1,
-        text=text, texttemplate="%{text}",
-        textfont=dict(size=9, color="black"),
-        colorbar=dict(title="Rate ratio<br>vs 1990", len=0.8),
-        hovertemplate=("<b>%{y}</b><br>Year: %{x}"
-                       "<br>Ratio: %{z:.2f}<extra></extra>"),
-    ))
+    # Zero reference line.
+    fig.add_vline(x=0, line_color=LANCET_INK, line_width=0.8)
+
+    for period, color, dy in window_spec:
+        sub = trend[trend["period"] == period]
+        xs, ys, lo, hi, psig = [], [], [], [], []
+        for _, r in sub.iterrows():
+            if r["cause"] not in row_idx:
+                continue
+            i = row_idx[r["cause"]]
+            ys.append(i + dy)
+            xs.append(float(r["aapc"]))
+            lo.append(float(r["aapc"] - r["ci_low"]))
+            hi.append(float(r["ci_high"] - r["aapc"]))
+            psig.append(float(r["p_value"]) < 0.05)
+
+        # Filled vs open markers: Plotly scatter doesn't accept per-point
+        # symbols and a shared colour with per-point fill, so we use a
+        # list of symbols ("circle" / "circle-open") with the trace colour.
+        symbols = ["circle" if s else "circle-open" for s in psig]
+        fig.add_trace(go.Scatter(
+            x=xs, y=ys,
+            mode="markers",
+            marker=dict(
+                symbol=symbols, size=8, color=color,
+                line=dict(color=color, width=1.5),
+            ),
+            error_x=dict(
+                type="data", symmetric=False,
+                array=hi, arrayminus=lo,
+                color=color, thickness=1.5, width=0,
+            ),
+            name=period,
+            hovertemplate=(
+                "%{text}<br>" + period +
+                "<br>AAPC: %{x:+.2f}%/yr<extra></extra>"
+            ),
+            text=[row_names[int(round(y - dy))] for y in ys],
+        ))
 
     _apply_base_layout(
         fig,
-        title="<b>Figure 2 - Age-standardized DALY rate of top-15 causes</b>",
-        title_subtitle="Vietnam, relative to 1990; absolute rate shown in cells",
-        width=1000, height=650,
-        yaxis=dict(autorange="reversed", tickfont=dict(size=10)),
+        width=900, height=500,
+        legend=dict(
+            orientation="h", x=0.5, xanchor="center",
+            y=-0.18, yanchor="top",
+        ),
     )
-    save_fig(fig, "fig2_heatmap", width=1000, height=650)
+    fig.update_layout(margin=dict(l=100, r=30, t=40, b=90))
+    fig.update_xaxes(title_text="AAPC (% per year)", zeroline=False)
+    # y runs top-down: top row = index 0, so visually we want y=0 at the
+    # top. Setting a reversed range (4.5 -> -0.5) achieves this without
+    # fighting autorange.
+    fig.update_yaxes(
+        tickmode="array",
+        tickvals=list(range(len(row_names))),
+        ticktext=row_names,
+        range=[len(row_names) - 0.5, -0.5],
+        title_text="",
+    )
+    save_fig(fig, "fig2_period_aapc", width=900, height=500)
     return fig
 
 
@@ -256,6 +302,14 @@ def fig3_decomposition(decomp):
         horizontal_spacing=0.14,
     )
 
+    # Per-component Lancet colours (see task spec).
+    comp_colors = {
+        "Population size":   LANCET_MUTED,   # pop-size = muted peach
+        "Age structure":     LANCET[4],      # ageing  = purple
+        "Age-specific rate": LANCET[2],      # rate    = green
+        "Net change":        LANCET_INK,     # net bar = ink
+    }
+
     for col, cg in enumerate(["NCD", "CMNN"], start=1):
         row = decomp[decomp["cause_group"] == cg].iloc[0]
         vals = [row["pop_size"] / 1e6,
@@ -264,28 +318,40 @@ def fig3_decomposition(decomp):
         labels = ["Population size", "Age structure", "Age-specific rate"]
         total = sum(vals)
 
-        measures = ["relative"] * 3 + ["total"]
+        # Manual waterfall: cumulative bases for the three contribution bars,
+        # total bar sits from 0. This lets us colour every bar independently.
+        cum = [0.0, vals[0], vals[0] + vals[1]]
+        bases = cum + [0.0]
+        heights = vals + [total]
         xs = labels + ["Net change"]
-        ys = vals + [total]
         texts = [f"{v:+.2f}M" for v in vals] + [f"{total:+.2f}M"]
+        bar_colors = [comp_colors[name] for name in xs]
 
-        fig.add_trace(go.Waterfall(
-            orientation="v",
-            measure=measures,
-            x=xs, y=ys,
+        fig.add_trace(go.Bar(
+            x=xs, y=heights, base=bases,
+            marker=dict(color=bar_colors,
+                        line=dict(color=LANCET_INK, width=0.6)),
             text=texts, textposition="outside",
-            connector=dict(line=dict(color="#888888", width=1)),
-            increasing=dict(marker=dict(color=PALETTE["injuries"])),
-            decreasing=dict(marker=dict(color=PALETTE["cmnn"])),
-            totals=dict(marker=dict(
-                color=PALETTE["ncd"] if cg == "NCD" else PALETTE["cmnn"])),
             showlegend=False,
             hovertemplate="%{x}<br>%{y:+.2f}M DALYs<extra></extra>",
         ), row=1, col=col)
 
-        fig.add_hline(y=0, line_color="black", line_width=0.8, row=1, col=col)
+        # Connector segments between consecutive bars.
+        endpoints = [cum[0] + vals[0],
+                     cum[1] + vals[1],
+                     cum[2] + vals[2]]
+        for k in range(3):
+            fig.add_shape(
+                type="line", xref=f"x{col}", yref=f"y{col}",
+                x0=k + 0.4, x1=k + 0.6,
+                y0=endpoints[k], y1=endpoints[k],
+                line=dict(color="#888888", width=0.8),
+            )
+
+        fig.add_hline(y=0, line_color=LANCET_INK, line_width=0.8,
+                      row=1, col=col)
         # Extend y-axis so outside text labels don't collide with subplot title.
-        cumulative = [sum(vals[:i + 1]) for i in range(len(vals))] + [total]
+        cumulative = endpoints + [total]
         y_max = max(max(cumulative), 0)
         y_min = min(min(cumulative), 0)
         span = y_max - y_min
@@ -327,6 +393,30 @@ def fig4_sea_comparison(metrics):
         horizontal_spacing=0.12,
     )
 
+    # Peer-country alpha gradient by 2023 NCD share rank (higher share ->
+    # higher alpha). 10 peers -> linear ramp 0.35..0.95.
+    peers = [c for c in SEA_COUNTRIES if c != "Vietnam"]
+    peer_2023 = (metrics[(metrics["location_name"].isin(peers))
+                         & (metrics["year"] == metrics["year"].max())]
+                 .set_index("location_name")["ncd_share_pct"])
+    # Fallback if a peer lacks a 2023 row: rank by most recent year available.
+    if peer_2023.isna().any() or len(peer_2023) < len(peers):
+        peer_2023 = (metrics[metrics["location_name"].isin(peers)]
+                     .sort_values("year")
+                     .drop_duplicates("location_name", keep="last")
+                     .set_index("location_name")["ncd_share_pct"])
+    peer_order = peer_2023.sort_values().index.tolist()
+    peer_alpha = {c: 0.35 + 0.60 * (i / max(len(peer_order) - 1, 1))
+                  for i, c in enumerate(peer_order)}
+    # Unpack LANCET_PEER hex into rgba().
+    _pr = int(LANCET_PEER[1:3], 16)
+    _pg = int(LANCET_PEER[3:5], 16)
+    _pb = int(LANCET_PEER[5:7], 16)
+
+    def _peer_rgba(c, a_override=None):
+        a = a_override if a_override is not None else peer_alpha.get(c, 0.6)
+        return f"rgba({_pr},{_pg},{_pb},{a:.2f})"
+
     # Panel A: NCD share over time
     for country in SEA_COUNTRIES:
         sub = metrics[metrics["location_name"] == country].sort_values("year")
@@ -334,7 +424,7 @@ def fig4_sea_comparison(metrics):
             fig.add_trace(go.Scatter(
                 x=sub["year"], y=sub["ncd_share_pct"],
                 mode="lines", name="Vietnam",
-                line=dict(color=PALETTE["vietnam"], width=3),
+                line=dict(color=LANCET_VIETNAM, width=3),
                 legendgroup="vn", legendrank=1,
                 hovertemplate=("Vietnam %{x}: "
                                "NCD share=%{y:.2f}%<extra></extra>"),
@@ -343,13 +433,13 @@ def fig4_sea_comparison(metrics):
             fig.add_trace(go.Scatter(
                 x=sub["year"], y=sub["ncd_share_pct"],
                 mode="lines", name=country,
-                line=dict(color="#AAAAAA", width=1.2),
-                opacity=0.8, legendgroup="sea",
+                line=dict(color=_peer_rgba(country), width=1.2),
+                legendgroup="sea",
                 hovertemplate=f"{country} %{{x}}: NCD share=%{{y:.2f}}%"
                               "<extra></extra>",
             ), row=1, col=1)
-    fig.add_hline(y=50, line_dash="dot", line_color="black",
-                  line_width=1, row=1, col=1,
+    fig.add_hline(y=50, line_dash="dot", line_color=LANCET_INK,
+                  line_width=0.8, row=1, col=1,
                   annotation_text="50% reference",
                   annotation_position="bottom right")
 
@@ -360,7 +450,7 @@ def fig4_sea_comparison(metrics):
             fig.add_trace(go.Scatter(
                 x=sub["sdi"], y=sub["ncd_share_pct"], mode="lines",
                 name="Vietnam (SDI path)",
-                line=dict(color=PALETTE["vietnam"], width=3),
+                line=dict(color=LANCET_VIETNAM, width=3),
                 showlegend=False,
                 hovertemplate=("Vietnam %{text}<br>SDI=%{x:.2f}"
                                "<br>NCD share=%{y:.2f}%<extra></extra>"),
@@ -368,17 +458,18 @@ def fig4_sea_comparison(metrics):
             ), row=1, col=2)
             fig.add_trace(go.Scatter(
                 x=[sub["sdi"].iloc[0]], y=[sub["ncd_share_pct"].iloc[0]],
-                mode="markers", marker=dict(color=PALETTE["vietnam"],
-                                            size=10, line=dict(width=1)),
+                mode="markers",
+                marker=dict(color=LANCET_VIETNAM, size=10,
+                            line=dict(color=LANCET_VIETNAM, width=1)),
                 name="Vietnam 1990", showlegend=False,
                 hovertemplate=("Vietnam 1990: SDI=%{x:.2f}, "
                                "NCD share=%{y:.2f}%<extra></extra>"),
             ), row=1, col=2)
             fig.add_trace(go.Scatter(
                 x=[sub["sdi"].iloc[-1]], y=[sub["ncd_share_pct"].iloc[-1]],
-                mode="markers", marker=dict(color=PALETTE["vietnam"],
-                                            size=16, symbol="star",
-                                            line=dict(width=1)),
+                mode="markers",
+                marker=dict(color=LANCET_VIETNAM, size=16, symbol="star",
+                            line=dict(color=LANCET_VIETNAM, width=1)),
                 name="Vietnam 2023", showlegend=False,
                 hovertemplate=("Vietnam 2023: SDI=%{x:.2f}, "
                                "NCD share=%{y:.2f}%<extra></extra>"),
@@ -386,7 +477,7 @@ def fig4_sea_comparison(metrics):
         else:
             fig.add_trace(go.Scatter(
                 x=sub["sdi"], y=sub["ncd_share_pct"], mode="lines",
-                line=dict(color="#AAAAAA", width=1), opacity=0.55,
+                line=dict(color=_peer_rgba(country), width=1),
                 showlegend=False, hoverinfo="skip",
             ), row=1, col=2)
 
@@ -403,7 +494,7 @@ def fig4_sea_comparison(metrics):
         fig.add_trace(go.Scatter(
             x=xline, y=yline, mode="lines",
             name="SEA expected (quadratic, VN excluded)",
-            line=dict(color="black", width=1.5, dash="dash"),
+            line=dict(color=LANCET_INK, width=1.5, dash="dash"),
             hoverinfo="skip",
         ), row=1, col=2)
         vn23 = merged[(merged["location_name"] == "Vietnam")
@@ -420,10 +511,10 @@ def fig4_sea_comparison(metrics):
                 ax=sdi23 - 0.08, ay=obs + 10,
                 text=obs_exp_text, showarrow=True,
                 arrowhead=2, arrowsize=1, arrowwidth=1,
-                arrowcolor=PALETTE["vietnam"],
-                font=dict(size=9, color=PALETTE["vietnam"]),
+                arrowcolor=LANCET_VIETNAM,
+                font=dict(size=9, color=LANCET_VIETNAM),
                 bgcolor="rgba(255,255,255,0.9)",
-                bordercolor=PALETTE["vietnam"], borderwidth=1,
+                bordercolor=LANCET_VIETNAM, borderwidth=1,
                 row=1, col=2,
             )
 
@@ -455,8 +546,11 @@ def fig5_age_sex_pyramid():
              & (df["metric_name"] == "Number")
              & (df["sex_name"].isin(["Male", "Female"]))
              & (df["age_name"].isin(AGE_GROUPS))
-             & (df["cause_name"].isin(
-                 [CAUSE_GROUPS["cmnn"], CAUSE_GROUPS["ncd"]]))
+             & (df["cause_name"].isin([
+                 CAUSE_GROUPS["cmnn"],
+                 CAUSE_GROUPS["ncd"],
+                 CAUSE_GROUPS["injuries"],
+             ]))
              & (df["year"].isin([1990, 2023]))].copy()
     sub["short"] = sub["cause_name"].map(CAUSE_SHORT)
 
@@ -468,13 +562,22 @@ def fig5_age_sex_pyramid():
                            columns=["sex_name", "short"],
                            values="val", aggfunc="sum")
               .reindex(AGE_GROUPS))
-        m_cmnn = -(pv[("Male", "CMNN")].values / 1e6)
-        m_ncd = -(pv[("Male", "NCD")].values / 1e6)
-        f_cmnn = pv[("Female", "CMNN")].values / 1e6
-        f_ncd = pv[("Female", "NCD")].values / 1e6
-        panels[yr] = (m_cmnn, m_ncd, f_cmnn, f_ncd)
-        xmax = max(xmax, float(np.nanmax(np.abs(
-            np.concatenate([m_cmnn + m_ncd, f_cmnn + f_ncd])))))
+
+        def _col(sex, short):
+            if (sex, short) in pv.columns:
+                return pv[(sex, short)].values
+            return np.zeros(len(AGE_GROUPS))
+
+        m_cmnn = -(_col("Male",   "CMNN")     / 1e6)
+        m_ncd  = -(_col("Male",   "NCD")      / 1e6)
+        m_inj  = -(_col("Male",   "Injuries") / 1e6)
+        f_cmnn =  (_col("Female", "CMNN")     / 1e6)
+        f_ncd  =  (_col("Female", "NCD")      / 1e6)
+        f_inj  =  (_col("Female", "Injuries") / 1e6)
+        panels[yr] = (m_cmnn, m_ncd, m_inj, f_cmnn, f_ncd, f_inj)
+        xmax = max(xmax, float(np.nanmax(np.abs(np.concatenate([
+            m_cmnn + m_ncd + m_inj, f_cmnn + f_ncd + f_inj,
+        ])))))
 
     fig = make_subplots(
         rows=1, cols=2, shared_yaxes=True,
@@ -482,43 +585,33 @@ def fig5_age_sex_pyramid():
         horizontal_spacing=0.06,
     )
     for col, yr in enumerate([1990, 2023], start=1):
-        m_cmnn, m_ncd, f_cmnn, f_ncd = panels[yr]
+        m_cmnn, m_ncd, m_inj, f_cmnn, f_ncd, f_inj = panels[yr]
         first = (col == 1)
-        fig.add_trace(go.Bar(
-            y=AGE_GROUPS, x=m_cmnn, orientation="h",
-            marker=dict(color=PALETTE["cmnn"]),
-            name="CMNN", legendgroup="cmnn", showlegend=first,
-            hovertemplate=(
-                f"Male CMNN, %{{y}}<br>"
-                f"{yr}: %{{customdata:.2f}}M<extra></extra>"),
-            customdata=np.abs(m_cmnn),
-        ), row=1, col=col)
-        fig.add_trace(go.Bar(
-            y=AGE_GROUPS, x=m_ncd, orientation="h",
-            marker=dict(color=PALETTE["ncd"]),
-            name="NCD", legendgroup="ncd", showlegend=first,
-            hovertemplate=(
-                f"Male NCD, %{{y}}<br>"
-                f"{yr}: %{{customdata:.2f}}M<extra></extra>"),
-            customdata=np.abs(m_ncd),
-        ), row=1, col=col)
-        fig.add_trace(go.Bar(
-            y=AGE_GROUPS, x=f_cmnn, orientation="h",
-            marker=dict(color=PALETTE["cmnn"]),
-            legendgroup="cmnn", showlegend=False,
-            hovertemplate=(
-                f"Female CMNN, %{{y}}<br>"
-                f"{yr}: %{{x:.2f}}M<extra></extra>"),
-        ), row=1, col=col)
-        fig.add_trace(go.Bar(
-            y=AGE_GROUPS, x=f_ncd, orientation="h",
-            marker=dict(color=PALETTE["ncd"]),
-            legendgroup="ncd", showlegend=False,
-            hovertemplate=(
-                f"Female NCD, %{{y}}<br>"
-                f"{yr}: %{{x:.2f}}M<extra></extra>"),
-        ), row=1, col=col)
-        fig.add_vline(x=0, line_color="black", line_width=0.8,
+        for short, m_arr, f_arr, color in [
+            ("CMNN",     m_cmnn, f_cmnn, LANCET_CMNN),
+            ("NCD",      m_ncd,  f_ncd,  LANCET_NCD),
+            ("Injuries", m_inj,  f_inj,  LANCET_INJURY),
+        ]:
+            fig.add_trace(go.Bar(
+                y=AGE_GROUPS, x=m_arr, orientation="h",
+                marker=dict(color=color,
+                            line=dict(color=color, width=0)),
+                name=short, legendgroup=short, showlegend=first,
+                hovertemplate=(
+                    f"Male {short}, %{{y}}<br>"
+                    f"{yr}: %{{customdata:.2f}}M<extra></extra>"),
+                customdata=np.abs(m_arr),
+            ), row=1, col=col)
+            fig.add_trace(go.Bar(
+                y=AGE_GROUPS, x=f_arr, orientation="h",
+                marker=dict(color=color,
+                            line=dict(color=color, width=0)),
+                legendgroup=short, showlegend=False,
+                hovertemplate=(
+                    f"Female {short}, %{{y}}<br>"
+                    f"{yr}: %{{x:.2f}}M<extra></extra>"),
+            ), row=1, col=col)
+        fig.add_vline(x=0, line_color=LANCET_INK, line_width=0.8,
                       row=1, col=col)
 
     _apply_base_layout(
@@ -553,8 +646,8 @@ def fig6_yll_yld_trends(df_yll_yld):
     )
 
     for measure_key, color, label in [
-        ("yll", PALETTE["yll"], "YLL rate"),
-        ("yld", PALETTE["yld"], "YLD rate"),
+        ("yll", LANCET_YLL, "YLL rate"),
+        ("yld", LANCET_YLD, "YLD rate"),
     ]:
         d = (vn[vn["measure_name"] == MEASURE[measure_key]]
              .sort_values("year"))
@@ -580,18 +673,12 @@ def fig6_yll_yld_trends(df_yll_yld):
     fig.add_trace(go.Scatter(
         x=ratio.index, y=ratio.values,
         mode="lines+markers", name="YLL/YLD ratio",
-        line=dict(color="#333333", width=2.5),
-        marker=dict(
-            size=7, color=ratio.values,
-            colorscale="RdBu_r", showscale=True,
-            cmin=float(ratio.min()), cmax=float(ratio.max()),
-            colorbar=dict(title="Ratio", x=1.04, xanchor="left",
-                          len=0.7, thickness=12),
-        ),
+        line=dict(color=LANCET_INK, width=2.5),
+        marker=dict(size=7, color=LANCET_INK),
         hovertemplate="Year: %{x}<br>YLL/YLD: %{y:.2f}<extra></extra>",
     ), row=1, col=2)
-    fig.add_hline(y=1, line_dash="dash", line_color="#888888",
-                  row=1, col=2,
+    fig.add_hline(y=1, line_dash="dash", line_color=LANCET_INK,
+                  line_width=0.8, row=1, col=2,
                   annotation_text="YLL = YLD",
                   annotation_position="top right")
 
@@ -601,8 +688,7 @@ def fig6_yll_yld_trends(df_yll_yld):
         title_subtitle="Age-standardized rates per 100,000, all causes",
         width=1200, height=520,
         legend=dict(x=0.45, y=1.0, xanchor="left", yanchor="top",
-                    bgcolor="rgba(255,255,255,0.95)",
-                    bordercolor="#CCCCCC", borderwidth=1),
+                    bgcolor="rgba(255,255,255,0)"),
     )
     fig.update_yaxes(title_text="Rate per 100,000", row=1, col=1)
     fig.update_yaxes(title_text="YLL/YLD ratio", row=1, col=2)
@@ -618,7 +704,7 @@ def fig6_yll_yld_trends(df_yll_yld):
 
 def fig7_sea_yll_yld(df_ratio):
     df = df_ratio.sort_values("ratio")  # ascending for horizontal bars
-    colors = [PALETTE["vietnam"] if c == "Vietnam" else "#ADB5BD"
+    colors = [LANCET_VIETNAM if c == "Vietnam" else LANCET_PEER
               for c in df["country"]]
 
     fig = go.Figure(go.Bar(
@@ -635,7 +721,8 @@ def fig7_sea_yll_yld(df_ratio):
             "YLD rate: %{customdata[1]:,.0f}<extra></extra>"
         ),
     ))
-    fig.add_vline(x=1, line_dash="dash", line_color="#888888",
+    fig.add_vline(x=1, line_dash="dash", line_color=LANCET_INK,
+                  line_width=0.8,
                   annotation_text="YLL = YLD",
                   annotation_position="top")
 
@@ -673,22 +760,22 @@ def fig8_cmnn_sensitivity():
         horizontal_spacing=0.10,
     )
 
-    # Colors for the split components: keep CMNN red for the combined group,
-    # assign lighter coral for C-only and accent pink for M+N+N.
-    c_only_color = "#F08080"   # light coral
-    mnn_color = "#9C6B6B"      # muted rose-brown
+    # Colours for the split components: CMNN total -> dark blue;
+    # communicable-only -> LANCET teal; maternal+neonatal+nutritional -> purple.
+    c_only_color = LANCET[3]  # teal
+    mnn_color    = LANCET[4]  # purple
 
     # Panel A: main
-    for short, color_key, col in [
-        ("CMNN",     "cmnn",     "CMNN"),
-        ("NCD",      "ncd",      "NCD"),
-        ("Injuries", "injuries", "Injuries"),
+    for short, color, col in [
+        ("CMNN",     LANCET_CMNN,   "CMNN"),
+        ("NCD",      LANCET_NCD,    "NCD"),
+        ("Injuries", LANCET_INJURY, "Injuries"),
     ]:
         fig.add_trace(go.Scatter(
             x=years, y=split[col].values,
             stackgroup="A", name=short,
-            line=dict(color=PALETTE[color_key], width=0.5),
-            fillcolor=_hex_to_rgba(PALETTE[color_key], 0.85),
+            line=dict(color=color, width=0.5),
+            fillcolor=_hex_to_rgba(color, 0.85),
             legendgroup=short,
             hovertemplate=f"{short}<br>%{{x}}: %{{y:,.0f}}/100k<extra></extra>",
         ), row=1, col=1)
@@ -697,12 +784,12 @@ def fig8_cmnn_sensitivity():
     # so they appear once in the legend; the new split components get their
     # own entries.
     for short, color, col_name, legend_name, legend_group, show_leg in [
-        ("C-only",   c_only_color,         "C_only",   "Communicable only",
+        ("C-only",   c_only_color,  "C_only",   "Communicable only",
          "c_only", True),
-        ("M+N+N",    mnn_color,            "MNN",      "Maternal+Neonatal+Nutritional",
+        ("M+N+N",    mnn_color,     "MNN",      "Maternal+Neonatal+Nutritional",
          "mnn", True),
-        ("NCD",      PALETTE["ncd"],       "NCD",      "NCD", "NCD", False),
-        ("Injuries", PALETTE["injuries"],  "Injuries", "Injuries",
+        ("NCD",      LANCET_NCD,    "NCD",      "NCD", "NCD", False),
+        ("Injuries", LANCET_INJURY, "Injuries", "Injuries",
          "Injuries", False),
     ]:
         fig.add_trace(go.Scatter(
@@ -732,26 +819,27 @@ def fig8_cmnn_sensitivity():
 
 
 # ---------------------------------------------------------------------------
-# Figure 9 - Vietnam 30q70 NCD vs CMNN probability (WHO SDG 3.4.1)
+# Figure 4 - merged Vietnam 30q70 trajectory + SEA strict SDG 3.4.1 ranking
 # ---------------------------------------------------------------------------
 
-def fig9_30q70_vietnam():
-    """Premature (ages 30-69) death probability for NCD and CMNN in Vietnam,
-    1990-2023. Computed from deaths numbers + 5-year age-band populations
-    following the WHO SDG 3.4.1 formulation (see utils.probability_30q70).
+def build_fig4_30q70_combined():
+    """Two-panel figure covering premature-NCD-mortality for Vietnam
+    (panel A) and its SEA peers (panel B).
 
-    Uncertainty band: because the age-specific mortality rates from GBD come
-    with 95% UI on the *rate*, we re-compute 30q70 at the low and high ends
-    of those UIs to produce an indicator-level uncertainty band.
+    Panel A: Vietnam 30q70 for NCD (broad GBD level-1) and CMNN, 1990-2023,
+    with joinpoint-fit overlay in a faint matching colour. The WHO SDG 3.4
+    one-third-reduction target trajectory from the 2015 NCD baseline to
+    2030 is drawn dashed in ink.
+
+    Panel B: 11 SEA countries ranked ascending by the strict SDG 3.4.1
+    30q70 (cardiovascular diseases, neoplasms, diabetes + CKD, chronic
+    respiratory diseases) in 2023. Open black circles overlay each
+    country's 1990 value, so the 33-year movement is visible at a glance.
     """
+    # --- Panel A data: Vietnam 30q70 (broad aggregate) -------------------
     age = pd.read_csv(PROC / "age_specific.csv")
     pop = pd.read_csv(PROC / "population.csv")
-    q30 = pd.read_csv(PROC / "probability_30q70.csv")
-
-    # Reconstruct UI bands by recomputing 30q70 at the lower/upper end of
-    # the deaths-number UIs (rate-based UI would also work; numbers UI is
-    # what GBD exposes directly).
-    from utils import AGE_BANDS_30_69, probability_30q70
+    from utils import AGE_BANDS_30_69, probability_30q70, joinpoint_aapc
 
     pop_wide = (pop[(pop["measure_name"] == "Population")
                     & (pop["sex_name"] == "Both")
@@ -759,125 +847,228 @@ def fig9_30q70_vietnam():
                 .pivot_table(index="age_name", columns="year", values="val")
                 .reindex(AGE_BANDS_30_69))
 
-    def _ui_series(cause_full):
+    def _series(cause_full):
         deaths = age[(age["measure_name"] == MEASURE["deaths"])
                      & (age["metric_name"] == "Number")
                      & (age["sex_name"] == "Both")
                      & (age["cause_name"] == cause_full)
                      & (age["age_name"].isin(AGE_BANDS_30_69))]
-        out = {}
-        for col, agg in [("val", "val"), ("lower", "lo"),
-                         ("upper", "hi")]:
-            wide = (deaths.pivot_table(index="age_name", columns="year",
-                                       values=col)
-                    .reindex(AGE_BANDS_30_69))
-            out[agg] = {
-                int(y): probability_30q70(wide[y].values, pop_wide[y].values)
-                for y in wide.columns if y in pop_wide.columns
-            }
-        return out
+        wide = (deaths.pivot_table(index="age_name", columns="year",
+                                   values="val")
+                .reindex(AGE_BANDS_30_69))
+        data = {int(y): probability_30q70(wide[y].values, pop_wide[y].values)
+                for y in wide.columns if y in pop_wide.columns}
+        yrs = np.asarray(sorted(data), dtype=int)
+        val = np.asarray([data[int(y)] for y in yrs], dtype=float) * 100
+        return yrs, val
 
-    ncd = _ui_series(CAUSE_GROUPS["ncd"])
-    cmnn = _ui_series(CAUSE_GROUPS["cmnn"])
+    vn_ncd_years,  vn_ncd_val  = _series(CAUSE_GROUPS["ncd"])
+    vn_cmnn_years, vn_cmnn_val = _series(CAUSE_GROUPS["cmnn"])
 
-    def _arr(d):
-        yrs = sorted(d)
-        return np.asarray(yrs, dtype=int), np.asarray([d[y] for y in yrs],
-                                                      dtype=float) * 100
+    def _joinpoint_fit(years, values):
+        """Piecewise log-linear fit; returns (years, fitted_values)."""
+        res = joinpoint_aapc(years.astype(float), values.astype(float))
+        fitted = np.full(len(years), np.nan, dtype=float)
+        for seg in res.get("segments", []) or []:
+            mask = (years >= seg["start_year"]) & (years <= seg["end_year"])
+            if not mask.any():
+                continue
+            x = years[mask].astype(float)
+            y = values[mask].astype(float)
+            logy = np.log(y)
+            X = np.vstack([x, np.ones_like(x)]).T
+            beta, *_ = np.linalg.lstsq(X, logy, rcond=None)
+            fitted[mask] = np.exp(beta[0] * x + beta[1])
+        return years, fitted
 
-    fig = go.Figure()
-    for data_dict, label, color in [
-        (ncd, "NCD 30q70", PALETTE["ncd"]),
-        (cmnn, "CMNN 30q70", PALETTE["cmnn"]),
-    ]:
-        yrs, val = _arr(data_dict["val"])
-        _, lo = _arr(data_dict["lo"])
-        _, hi = _arr(data_dict["hi"])
-        fig.add_trace(go.Scatter(
-            x=np.concatenate([yrs, yrs[::-1]]),
-            y=np.concatenate([hi, lo[::-1]]),
-            fill="toself", fillcolor=_hex_to_rgba(color, 0.15),
-            line=dict(color="rgba(0,0,0,0)"),
-            showlegend=False, hoverinfo="skip",
-        ))
-        fig.add_trace(go.Scatter(
-            x=yrs, y=val, mode="lines+markers", name=label,
-            line=dict(color=color, width=2.5), marker=dict(size=4),
-            hovertemplate=f"{label}<br>%{{x}}: %{{y:.2f}}%<extra></extra>",
-        ))
+    ncd_fit_y  = _joinpoint_fit(vn_ncd_years,  vn_ncd_val)[1]
+    cmnn_fit_y = _joinpoint_fit(vn_cmnn_years, vn_cmnn_val)[1]
 
-    _apply_base_layout(
-        fig,
-        title=("<b>Figure 9 - Probability of dying between ages 30 and 70, "
-               "Vietnam 1990-2023</b>"),
-        title_subtitle=("30q70 by cause group (WHO SDG 3.4.1); "
-                        "Both sex; shaded bands = 95% uncertainty interval"),
-        width=900, height=500,
+    # SDG 3.4 trajectory: linear from 2015 NCD baseline (22.76%) to 16.7%
+    # at 2030. Task spec fixes both endpoints; we draw on [2015, 2030].
+    sdg_x = np.array([2015, 2030], dtype=float)
+    sdg_y = np.array([22.76, 16.70], dtype=float)
+
+    # --- Panel B data: SEA strict SDG 3.4.1 ranking ---------------------
+    sea = pd.read_csv(TAB / "sea_30q70_summary.csv")
+    sea = sea.sort_values("30q70_2023").reset_index(drop=True)
+    bar_colors = [LANCET_VIETNAM if c == "Vietnam" else LANCET_PEER
+                  for c in sea["country"]]
+
+    # --- Build figure ---------------------------------------------------
+    fig = make_subplots(
+        rows=1, cols=2,
+        column_widths=[0.45, 0.55],
+        horizontal_spacing=0.14,
     )
-    fig.update_xaxes(title_text="Year", range=[1990, 2023])
-    fig.update_yaxes(title_text="Probability of premature death (%)",
-                     rangemode="tozero")
 
-    save_fig(fig, "fig9_30q70_vietnam", width=900, height=500)
-    return fig
+    # === Panel A: Vietnam trajectory ===
+    # NCD observed
+    fig.add_trace(go.Scatter(
+        x=vn_ncd_years, y=vn_ncd_val,
+        mode="lines+markers", name="NCD (broad)",
+        line=dict(color=LANCET_NCD, width=2.5),
+        marker=dict(size=5, color=LANCET_NCD),
+        legendgroup="ncd",
+        hovertemplate="NCD<br>%{x}: %{y:.2f}%<extra></extra>",
+    ), row=1, col=1)
+    # NCD joinpoint fit
+    fig.add_trace(go.Scatter(
+        x=vn_ncd_years, y=ncd_fit_y,
+        mode="lines", name="NCD joinpoint fit",
+        line=dict(color=LANCET_NCD, width=1.2),
+        opacity=0.5, showlegend=False, hoverinfo="skip",
+    ), row=1, col=1)
+    # CMNN observed
+    fig.add_trace(go.Scatter(
+        x=vn_cmnn_years, y=vn_cmnn_val,
+        mode="lines+markers", name="CMNN",
+        line=dict(color=LANCET_CMNN, width=2.5),
+        marker=dict(size=5, color=LANCET_CMNN),
+        legendgroup="cmnn",
+        hovertemplate="CMNN<br>%{x}: %{y:.2f}%<extra></extra>",
+    ), row=1, col=1)
+    # CMNN joinpoint fit
+    fig.add_trace(go.Scatter(
+        x=vn_cmnn_years, y=cmnn_fit_y,
+        mode="lines", name="CMNN joinpoint fit",
+        line=dict(color=LANCET_CMNN, width=1.2),
+        opacity=0.5, showlegend=False, hoverinfo="skip",
+    ), row=1, col=1)
+    # SDG target trajectory
+    fig.add_trace(go.Scatter(
+        x=sdg_x, y=sdg_y,
+        mode="lines", name="SDG 3.4 target",
+        line=dict(color=LANCET_INK, width=1.2, dash="dot"),
+        hovertemplate="SDG target<br>%{x}: %{y:.2f}%<extra></extra>",
+    ), row=1, col=1)
 
+    # Panel A endpoint annotations (xref="x" is the first subplot; plotly
+    # reserves x1 suffix-less naming even with make_subplots).
+    ncd_2023_val = float(vn_ncd_val[-1])
+    cmnn_2023_val = float(vn_cmnn_val[-1])
+    fig.add_annotation(
+        xref="x", yref="y",
+        x=2023, y=ncd_2023_val,
+        text=f"{ncd_2023_val:.1f}%",
+        xanchor="left", yanchor="middle",
+        xshift=6, showarrow=False,
+        font=dict(size=12, color=LANCET_NCD),
+    )
+    fig.add_annotation(
+        xref="x", yref="y",
+        x=2023, y=cmnn_2023_val,
+        text=f"{cmnn_2023_val:.1f}%",
+        xanchor="left", yanchor="middle",
+        xshift=6, showarrow=False,
+        font=dict(size=12, color=LANCET_CMNN),
+    )
+    fig.add_annotation(
+        xref="x", yref="y",
+        x=2030, y=16.70,
+        text="16.7%",
+        xanchor="left", yanchor="middle",
+        xshift=4, showarrow=False,
+        font=dict(size=12, color=LANCET_INK),
+    )
 
-# ---------------------------------------------------------------------------
-# Figure 10 - SEA strict SDG 3.4.1 30q70 ranking, 2023 (+ 1990 reference)
-# ---------------------------------------------------------------------------
+    # Panel A letter
+    fig.add_annotation(
+        xref="x domain", yref="y domain",
+        x=0.0, y=1.0, xanchor="left", yanchor="bottom",
+        text="<b>A</b>", showarrow=False,
+        font=dict(family="Helvetica, Arial, sans-serif",
+                  size=16, color=LANCET_INK),
+    )
 
-def fig10_sea_ncd_premature():
-    """Horizontal bar ranking of the 11 SEA countries by strict WHO
-    SDG 3.4.1 30q70 (premature NCD mortality probability) in 2023, with
-    1990 values overlaid as open black circles so the 33-year movement is
-    visible at a glance.
-
-    Data source: tables/sea_30q70_summary.csv (see scripts/07_30q70_sea.py).
-    The indicator follows the narrow SDG definition (cardiovascular disease,
-    neoplasms, diabetes+CKD, chronic respiratory disease), computed per
-    country via Chiang II on 5-year age-band GBD death rates.
-    """
-    df = pd.read_csv(TAB / "sea_30q70_summary.csv")
-    # Ascending by 2023: best performers at bottom, worst at top.
-    df = df.sort_values("30q70_2023").reset_index(drop=True)
-
-    colors = ["#c0392b" if c == "Vietnam" else "#ADB5BD" for c in df["country"]]
-
-    fig = go.Figure()
-
-    # 2023 bars
+    # === Panel B: SEA strict 30q70 ranking ===
     fig.add_trace(go.Bar(
-        x=df["30q70_2023"], y=df["country"],
+        x=sea["30q70_2023"], y=sea["country"],
         orientation="h",
-        marker=dict(color=colors, line=dict(color="white", width=0.5)),
-        text=[f"{v:.1f}%" for v in df["30q70_2023"]],
-        textposition="outside",
-        name="2023",
+        marker=dict(color=bar_colors,
+                    line=dict(color=LANCET_INK, width=0.6)),
+        showlegend=False,
+        customdata=sea["30q70_1990"].values,
         hovertemplate=(
             "<b>%{y}</b><br>"
             "2023 30q70: %{x:.2f}%<br>"
             "1990 30q70: %{customdata:.2f}%"
             "<extra></extra>"
         ),
-        customdata=df["30q70_1990"].values,
-    ))
-
+    ), row=1, col=2)
     # 1990 open-black-circle overlay
     fig.add_trace(go.Scatter(
-        x=df["30q70_1990"], y=df["country"],
-        mode="markers",
+        x=sea["30q70_1990"], y=sea["country"],
+        mode="markers", name="1990",
+        marker=dict(symbol="circle-open", size=9,
+                    color="black",
+                    line=dict(color="black", width=1.5)),
+        showlegend=False, hoverinfo="skip",
+    ), row=1, col=2)
+
+    # Panel B letter
+    fig.add_annotation(
+        xref="x2 domain", yref="y2 domain",
+        x=0.0, y=1.0, xanchor="left", yanchor="bottom",
+        text="<b>B</b>", showarrow=False,
+        font=dict(family="Helvetica, Arial, sans-serif",
+                  size=16, color=LANCET_INK),
+    )
+
+    # Legend (phantom traces): filled red = VN 2023, filled grey = Peer
+    # 2023, open circle = 1990. Placed top-right in paper coords.
+    fig.add_trace(go.Scatter(
+        x=[None], y=[None], mode="markers",
+        marker=dict(symbol="square", size=12, color=LANCET_VIETNAM),
+        name="Vietnam 2023",
+    ))
+    fig.add_trace(go.Scatter(
+        x=[None], y=[None], mode="markers",
+        marker=dict(symbol="square", size=12, color=LANCET_PEER),
+        name="Peer 2023",
+    ))
+    fig.add_trace(go.Scatter(
+        x=[None], y=[None], mode="markers",
         marker=dict(symbol="circle-open", size=10,
-                    color="black", line=dict(width=1.5)),
+                    color="black", line=dict(color="black", width=1.5)),
         name="1990",
-        hoverinfo="skip",
     ))
 
-    _apply_base_layout(fig, width=900, height=520, showlegend=True)
-    fig.update_xaxes(title_text="30q70 probability of premature NCD "
-                     "mortality (%)", rangemode="tozero")
-    fig.update_yaxes(title_text="")
+    _apply_base_layout(
+        fig,
+        width=1400, height=620,
+        showlegend=True,
+        legend=dict(
+            x=1.0, y=1.08, xanchor="right", yanchor="bottom",
+            orientation="h",
+            bgcolor="rgba(255,255,255,0)",
+            bordercolor="rgba(0,0,0,0)", borderwidth=0,
+        ),
+    )
+    fig.update_layout(margin=dict(l=70, r=30, t=70, b=70))
 
-    save_fig(fig, "fig10_sea_ncd_premature", width=900, height=520)
+    # Panel A axes
+    fig.update_xaxes(title_text="Year", range=[1990, 2030], row=1, col=1)
+    fig.update_yaxes(title_text="30q70 (%)", rangemode="tozero", row=1, col=1)
+    # Panel B axes
+    fig.update_xaxes(
+        title_text=("30q70 (%) - WHO SDG 3.4.1 strict 4-NCD definition"),
+        rangemode="tozero", row=1, col=2,
+    )
+    fig.update_yaxes(title_text="", row=1, col=2)
+
+    # Country-name tick styling: Vietnam red + bold, others ink normal.
+    vn_label = "<b><span style='color:#ED0000'>Vietnam</span></b>"
+    tick_labels = [vn_label if c == "Vietnam" else c for c in sea["country"]]
+    fig.update_yaxes(
+        row=1, col=2,
+        tickmode="array",
+        tickvals=list(sea["country"]),
+        ticktext=tick_labels,
+        tickfont=dict(size=13, color=LANCET_INK),
+    )
+
+    save_fig(fig, "fig4_30q70_combined", width=1400, height=620)
     return fig
 
 
@@ -896,16 +1087,15 @@ def run():
     df_ratio = pd.read_csv(TAB / "sea_yll_yld_ratio.csv")
 
     fig1_overview(df_burden, metrics)
-    fig2_heatmap()
+    build_fig2_period_aapc()
     fig3_decomposition(decomp)
     fig4_sea_comparison(metrics)
     fig5_age_sex_pyramid()
     fig6_yll_yld_trends(df_yll_yld)
     fig7_sea_yll_yld(df_ratio)
     fig8_cmnn_sensitivity()
-    fig9_30q70_vietnam()
-    fig10_sea_ncd_premature()
-    print("  [ok] all 10 figures written to figures/html + figures/static")
+    build_fig4_30q70_combined()
+    print("  [ok] all 9 figures written to figures/html + figures/static")
 
 
 if __name__ == "__main__":
