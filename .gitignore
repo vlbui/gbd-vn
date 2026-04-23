@@ -3,7 +3,7 @@ data/raw/
 
 # Generated outputs — tái tạo được từ scripts
 figures/html/
-figure/static
+figure/static/
 
 # Word binaries — tái tạo từ md qua build_main_docx.py
 *.docx
