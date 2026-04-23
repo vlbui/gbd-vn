@@ -3,7 +3,16 @@ data/raw/
 
 # Generated outputs — tái tạo được từ scripts
 figures/html/
-figure/static/
+figures/static/
+
+# Image binaries — build lại từ scripts/06_figures.py, không cần lên git
+*.png
+*.svg
+*.jpg
+*.jpeg
+*.gif
+*.webp
+*.pdf
 
 # Word binaries — tái tạo từ md qua build_main_docx.py
 *.docx

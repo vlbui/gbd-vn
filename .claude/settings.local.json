@@ -1,9 +1,0 @@
-{
-  "permissions": {
-    "allow": [
-      "Bash(python -c \"import pandas, numpy, matplotlib, seaborn, statsmodels, openpyxl, ruptures; print\\('all ok'\\)\")",
-      "Bash(python -c ' *)",
-      "Bash(python analysis.py)"
-    ]
-  }
-}
