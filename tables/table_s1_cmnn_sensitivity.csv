@@ -1,0 +1,9 @@
+group,1990,2000,2010,2023,AAPC_%,AAPC_95CI
+"CMNN (full, main analysis)",13295.9,8549.0,5870.2,4022.1,-4.63,"-4.80, -4.46"
+Communicable only (sensitivity),8908.8,5611.2,4001.6,2688.2,-5.05,"-5.24, -4.86"
+Maternal+Neonatal+Nutritional (sensitivity),4387.1,2937.8,1868.6,1334.0,-3.45,"-3.66, -3.25"
+Non-communicable diseases,21688.2,19960.4,19742.8,19282.8,-0.37,"-0.45, -0.30"
+Injuries,5942.0,5409.9,4683.0,3981.8,-1.13,"-1.24, -1.03"
+"NCD share vs full CMNN (main analysis, % of total DALYs)",52.99,58.85,65.17,70.67,,
+NCD share vs C-only CMNN (% of total DALYs),59.36,64.43,69.45,74.3,,
+NCD share vs M+N+N only CMNN (% of total DALYs),67.74,70.51,75.08,78.39,,

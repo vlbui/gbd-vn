@@ -1,0 +1,22 @@
+# Data raw — IHME license, file nặng
+data/raw/
+
+# Generated outputs — tái tạo được từ scripts
+figures/html/
+
+# Word binaries — tái tạo từ md qua build_main_docx.py
+*.docx
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/

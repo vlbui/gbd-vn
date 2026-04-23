@@ -1,0 +1,11 @@
+pandas
+numpy
+scipy
+matplotlib
+seaborn
+statsmodels
+ruptures
+openpyxl
+jupyter
+plotly
+kaleido==0.2.1
