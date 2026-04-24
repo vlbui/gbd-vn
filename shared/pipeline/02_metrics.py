@@ -7,34 +7,34 @@
   - CMNN split sensitivity (C-only vs M+N+N)
 
 All AAPC values use joinpoint regression (ruptures Dynp + BIC selection +
-per-segment OLS + Clegg delta-method 95% CI). See utils.joinpoint_aapc.
-References: Kim HJ et al. Stat Med 2000;19:335-51 (joinpoint regression);
-Clegg LX et al. Stat Med 2009;28:3670-82 (AAPC + 95% CI via delta method).
+per-segment OLS + Clegg delta-method 95% CI). See shared.joinpoint_aapc.
+References: Kim HJ et al. Stat Med 2000;19:335-51; Clegg LX et al. Stat
+Med 2009;28:3670-82.
 
 Exports
 -------
-  tables/metrics.csv                      per-country/year shares + ratio
-  tables/table1_summary.csv               Vietnam summary (with 30q70 rows)
-  tables/table_s1_cmnn_sensitivity.csv    CMNN split + NCD-share variants
-  data/processed/yll_yld_ratio.csv        Vietnam YLL + YLD + ratio
-  data/processed/cmnn_split.csv           C-only / M+N+N year series
-  data/processed/probability_30q70.csv    Vietnam 30q70 NCD + CMNN by year
+  projects/01_epi_transition/tables/metrics.csv
+  projects/01_epi_transition/tables/table1_summary.csv
+  projects/01_epi_transition/tables/table_s1_cmnn_sensitivity.csv
+  shared_processed/yll_yld_ratio.csv        Vietnam YLL + YLD + ratio
+  shared_processed/cmnn_split.csv           C-only / M+N+N year series
+  shared_processed/probability_30q70.csv    Vietnam 30q70 NCD + CMNN by year
 """
-
-import sys
-from pathlib import Path
-
-sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import numpy as np
 import pandas as pd
 
-from utils import (
-    PROC, TAB, ensure_dirs,
+from shared import (
+    SHARED_PROCESSED, PROJECTS, ensure_dirs,
     CAUSE_GROUPS, CAUSE_SHORT, MEASURE, AGE_BANDS_30_69,
     get_asr, cause_shares, probability_30q70,
     joinpoint_aapc,
 )
+
+
+_PAPER_01 = PROJECTS / "01_epi_transition"
+_PAPER_01_DATA = _PAPER_01 / "data"
+_PAPER_01_TABLES = _PAPER_01 / "tables"
 
 
 # Level-2 CMNN subgroups, as they appear in query2a_cmnn.csv. These sum
@@ -60,13 +60,12 @@ def compute_30q70_vietnam():
 
     Uses 5-year deaths counts and populations for the eight age bands
     30-34 through 65-69 (both sexes combined). Saves the full series to
-    data/processed/probability_30q70.csv and returns it.
+    shared_processed/probability_30q70.csv and returns it.
 
-    Reference: WHO Global Action Plan for the Prevention and Control of NCDs
-    2013-2020 (Indicator 10). SDG 3.4.1.
+    Reference: WHO Global Action Plan for NCDs 2013-2020 (Indicator 10); SDG 3.4.1.
     """
-    age = pd.read_csv(PROC / "age_specific.csv")
-    pop = pd.read_csv(PROC / "population.csv")
+    age = pd.read_csv(SHARED_PROCESSED / "age_specific.csv")
+    pop = pd.read_csv(SHARED_PROCESSED / "population.csv")
 
     deaths = age[(age["measure_name"] == MEASURE["deaths"])
                  & (age["metric_name"] == "Number")
@@ -97,7 +96,7 @@ def compute_30q70_vietnam():
                              else np.nan))
 
     out = pd.DataFrame(rows).sort_values(["cause_group", "year"]).reset_index(drop=True)
-    out.to_csv(PROC / "probability_30q70.csv", index=False)
+    out.to_csv(SHARED_PROCESSED / "probability_30q70.csv", index=False)
     return out
 
 
@@ -106,12 +105,9 @@ def compute_30q70_vietnam():
 def cmnn_sensitivity():
     """Sensitivity: decompose CMNN into C-only (HIV + respiratory + enteric +
     NTDs + other infectious) and M+N+N (maternal/neonatal + nutritional).
-
-    Reports alternative NCD-share denominators so reviewers can see how the
-    transition picture changes if CMNN is narrowed.
     """
-    cmnn_det = pd.read_csv(PROC / "cmnn_vietnam.csv")
-    burden = pd.read_csv(PROC / "burden_sea.csv")
+    cmnn_det = pd.read_csv(_PAPER_01_DATA / "cmnn_vietnam.csv")
+    burden = pd.read_csv(SHARED_PROCESSED / "burden_sea.csv")
 
     def _filter(df):
         return df[(df["location_name"] == "Vietnam")
@@ -123,12 +119,10 @@ def cmnn_sensitivity():
     det = _filter(cmnn_det)
     lvl1 = _filter(burden)
 
-    # Level-1 rates (main analysis)
     lvl1_wide = (lvl1[lvl1["cause_name"].isin(CAUSE_SHORT.keys())]
                  .assign(short=lvl1["cause_name"].map(CAUSE_SHORT))
                  .pivot_table(index="year", columns="short", values="val"))
 
-    # Level-2 split (sensitivity)
     c_only = (det[det["cause_name"].isin(C_ONLY_CAUSES)]
               .groupby("year")["val"].sum().rename("C_only"))
     mnn = (det[det["cause_name"].isin(MNN_CAUSES)]
@@ -138,8 +132,6 @@ def cmnn_sensitivity():
     split["CMNN_check"] = split["C_only"] + split["MNN"]
     max_err = (split["CMNN"] - split["CMNN_check"]).abs().max()
 
-    # Alternative NCD-share denominators using each CMNN variant.
-    # NCD share = NCD / (NCD + <CMNN variant> + Injuries) * 100
     split["ncd_share_main_pct"] = (
         split["NCD"] / (split["NCD"] + split["CMNN"] + split["Injuries"]) * 100)
     split["ncd_share_vs_Conly_pct"] = (
@@ -147,9 +139,8 @@ def cmnn_sensitivity():
     split["ncd_share_vs_MNN_pct"] = (
         split["NCD"] / (split["NCD"] + split["MNN"] + split["Injuries"]) * 100)
 
-    split.to_csv(PROC / "cmnn_split.csv")
+    split.to_csv(SHARED_PROCESSED / "cmnn_split.csv")
 
-    # Table S1
     years = [1990, 2000, 2010, 2023]
     s1_rows = []
     for col, label in [
@@ -185,14 +176,14 @@ def cmnn_sensitivity():
         })
 
     s1 = pd.DataFrame(s1_rows)
-    s1.to_csv(TAB / "table_s1_cmnn_sensitivity.csv", index=False)
+    s1.to_csv(_PAPER_01_TABLES / "table_s1_cmnn_sensitivity.csv", index=False)
 
     print(f"  CMNN split max reconciliation error: {max_err:.3f}")
     print(f"  NCD share (main)         2023 = {split.loc[2023, 'ncd_share_main_pct']:.2f}%")
     print(f"  NCD share vs C-only      2023 = {split.loc[2023, 'ncd_share_vs_Conly_pct']:.2f}%")
     print(f"  NCD share vs M+N+N only  2023 = {split.loc[2023, 'ncd_share_vs_MNN_pct']:.2f}%")
-    print("  [ok] tables/table_s1_cmnn_sensitivity.csv, "
-          "data/processed/cmnn_split.csv")
+    print("  [ok] projects/01/tables/table_s1_cmnn_sensitivity.csv, "
+          "shared_processed/cmnn_split.csv")
     return split
 
 
@@ -200,16 +191,14 @@ def cmnn_sensitivity():
 
 def run():
     print("\n=== 02 METRICS ===")
-    ensure_dirs()
+    ensure_dirs(SHARED_PROCESSED, _PAPER_01_TABLES)
 
-    df_burden = pd.read_csv(PROC / "burden_sea.csv")
-    df_yll_yld = pd.read_csv(PROC / "yll_yld_sea.csv")
+    df_burden = pd.read_csv(SHARED_PROCESSED / "burden_sea.csv")
+    df_yll_yld = pd.read_csv(SHARED_PROCESSED / "yll_yld_sea.csv")
 
-    # ---- Per-country/year cause composition (CMNN/NCD/Injuries shares) ----
-    shares = cause_shares(df_burden)  # all countries
-    shares.to_csv(TAB / "metrics.csv", index=False)
+    shares = cause_shares(df_burden)
+    shares.to_csv(_PAPER_01_TABLES / "metrics.csv", index=False)
 
-    # ---- YLL/YLD ratio, Vietnam --------------------------------------------
     vn_yy = df_yll_yld[
         (df_yll_yld["location_name"] == "Vietnam")
         & (df_yll_yld["age_name"] == "Age-standardized")
@@ -226,12 +215,10 @@ def run():
            .rename(columns={"val": "yld", "lower": "yld_lo", "upper": "yld_hi"}))
     yll_yld = yll.join(yld, how="inner").sort_index()
     yll_yld["ratio"] = yll_yld["yll"] / yll_yld["yld"]
-    yll_yld.to_csv(PROC / "yll_yld_ratio.csv")
+    yll_yld.to_csv(SHARED_PROCESSED / "yll_yld_ratio.csv")
 
-    # ---- 30q70 (WHO SDG 3.4.1), Vietnam ------------------------------------
     q30 = compute_30q70_vietnam()
 
-    # ---- Table 1 summary, Vietnam ------------------------------------------
     vn_shares = shares[shares["location_name"] == "Vietnam"].set_index("year")
     vn_rates = (df_burden[(df_burden["location_name"] == "Vietnam")
                           & (df_burden["age_name"] == "Age-standardized")
@@ -244,7 +231,6 @@ def run():
 
     years_snap = [1990, 2000, 2010, 2023]
     rows = []
-    # Age-std rates for CMNN/NCD/Injuries
     for g in ("CMNN", "NCD", "Injuries"):
         series = vn_rates[g]
         aapc = joinpoint_aapc(series.index.values, series.values)
@@ -256,7 +242,6 @@ def run():
             "AAPC_95CI": f"{aapc['ci_low']:.2f}, {aapc['ci_high']:.2f}",
         })
 
-    # Cause-composition rows (new main indicator)
     for col, label in [
         ("cmnn_share_pct", "CMNN share of total DALYs (%)"),
         ("ncd_share_pct", "NCD share of total DALYs (%)"),
@@ -274,7 +259,6 @@ def run():
             "AAPC_95CI": f"{aapc['ci_low']:.2f}, {aapc['ci_high']:.2f}",
         })
 
-    # 30q70 rows (WHO SDG 3.4.1)
     for cg_label, cg_key in [("NCD", "NCD"), ("CMNN", "CMNN")]:
         series = (q30[q30["cause_group"] == cg_key]
                   .set_index("year")["probability_30q70_pct"])
@@ -288,7 +272,6 @@ def run():
                 "AAPC_95CI": f"{aapc['ci_low']:.2f}, {aapc['ci_high']:.2f}",
             })
 
-    # YLL, YLD, YLL/YLD ratio rows
     if set(years_snap).issubset(yll_yld.index):
         for col, label in [("yll", "YLL rate (per 100k)"),
                            ("yld", "YLD rate (per 100k)")]:
@@ -310,7 +293,7 @@ def run():
         })
 
     tbl1 = pd.DataFrame(rows)
-    tbl1.to_csv(TAB / "table1_summary.csv", index=False)
+    tbl1.to_csv(_PAPER_01_TABLES / "table1_summary.csv", index=False)
 
     print(f"  Vietnam NCD share 1990->2023: "
           f"{vn_shares.loc[1990, 'ncd_share_pct']:.2f}% "
@@ -321,7 +304,7 @@ def run():
     print(f"  YLL/YLD ratio 1990: {yll_yld.loc[1990, 'ratio']:.2f}")
     print(f"  YLL/YLD ratio 2023: {yll_yld.loc[2023, 'ratio']:.2f}")
     print("  [ok] tables/metrics.csv, tables/table1_summary.csv, "
-          "data/processed/probability_30q70.csv")
+          "shared_processed/probability_30q70.csv")
 
     print("  -- CMNN sensitivity analysis --")
     split = cmnn_sensitivity()

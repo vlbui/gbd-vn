@@ -19,24 +19,27 @@ Figures:
                              2023 strict SDG 3.4.1 ranking with 1990 overlay
 """
 
-import sys
 from pathlib import Path
-
-sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
-from utils import (
-    PROC, TAB, SEA_COUNTRIES, PALETTE, BASE_LAYOUT,
+from shared import (
+    SHARED_PROCESSED, SEA_COUNTRIES, PALETTE, BASE_LAYOUT,
     CAUSE_GROUPS, CAUSE_SHORT, MEASURE,
     LANCET, LANCET_CMNN, LANCET_NCD, LANCET_INJURY,
     LANCET_YLL, LANCET_YLD, LANCET_VIETNAM, LANCET_PEER,
     LANCET_INK, LANCET_MUTED,
     ensure_dirs, save_fig,
 )
+
+
+_PAPER_DIR = Path(__file__).resolve().parents[1]
+_TABLES = _PAPER_DIR / "tables"
+_FIG_HTML = _PAPER_DIR / "figures" / "html"
+_FIG_STATIC = _PAPER_DIR / "figures" / "static"
 
 
 AGE_GROUPS = [
@@ -63,8 +66,8 @@ def _apply_base_layout(fig, title=None, title_subtitle=None, **overrides):
     Figure-level titles and subtitles are NOT baked into the image. The
     `title` and `title_subtitle` parameters remain in the signature for
     call-site compatibility but are ignored. Captions belong in the
-    manuscript text, not the PNG/SVG (see utils.save_fig, which also
-    strips any lingering titles via utils.strip_figure_titles).
+    manuscript text, not the PNG/SVG (see shared.save_fig, which also
+    strips any lingering titles via shared.strip_figure_titles).
     """
     del title, title_subtitle  # intentionally unused
     layout = {k: v for k, v in BASE_LAYOUT.items()
@@ -203,7 +206,7 @@ def build_fig2_period_aapc():
 
     Filled marker = p < 0.05 (significant change); open marker = p >= 0.05.
     """
-    trend = pd.read_csv(TAB / "trend_results.csv")
+    trend = pd.read_csv(_TABLES / "trend_results.csv")
 
     # Row order (top -> bottom) and display labels.
     row_spec = [
@@ -383,7 +386,7 @@ def fig4_sea_comparison(metrics):
     fit on 10 SEA countries (Vietnam excluded). Vietnam's observed-to-
     expected ratio at its 2023 SDI is annotated directly on the plot.
     """
-    sdi = pd.read_csv(PROC / "sdi_sea.csv")
+    sdi = pd.read_csv(SHARED_PROCESSED / "sdi_sea.csv")
     merged = metrics.merge(sdi[["location_name", "year", "sdi"]],
                            on=["location_name", "year"], how="left")
 
@@ -541,7 +544,7 @@ def fig4_sea_comparison(metrics):
 # ---------------------------------------------------------------------------
 
 def fig5_age_sex_pyramid():
-    df = pd.read_csv(PROC / "age_specific.csv")
+    df = pd.read_csv(SHARED_PROCESSED / "age_specific.csv")
     sub = df[(df["measure_name"] == MEASURE["daly"])
              & (df["metric_name"] == "Number")
              & (df["sex_name"].isin(["Male", "Female"]))
@@ -751,7 +754,7 @@ def fig8_cmnn_sensitivity():
     Both panels use age-standardized DALY rate per 100k, Both sex, 1990-2023,
     shown as stacked area.
     """
-    split = pd.read_csv(PROC / "cmnn_split.csv", index_col=0)
+    split = pd.read_csv(SHARED_PROCESSED / "cmnn_split.csv", index_col=0)
     years = split.index.values
 
     fig = make_subplots(
@@ -837,9 +840,9 @@ def build_fig4_30q70_combined():
     country's 1990 value, so the 33-year movement is visible at a glance.
     """
     # --- Panel A data: Vietnam 30q70 (broad aggregate) -------------------
-    age = pd.read_csv(PROC / "age_specific.csv")
-    pop = pd.read_csv(PROC / "population.csv")
-    from utils import AGE_BANDS_30_69, probability_30q70, joinpoint_aapc
+    age = pd.read_csv(SHARED_PROCESSED / "age_specific.csv")
+    pop = pd.read_csv(SHARED_PROCESSED / "population.csv")
+    from shared import AGE_BANDS_30_69, probability_30q70, joinpoint_aapc
 
     pop_wide = (pop[(pop["measure_name"] == "Population")
                     & (pop["sex_name"] == "Both")
@@ -890,7 +893,7 @@ def build_fig4_30q70_combined():
     sdg_y = np.array([22.76, 16.70], dtype=float)
 
     # --- Panel B data: SEA strict SDG 3.4.1 ranking ---------------------
-    sea = pd.read_csv(TAB / "sea_30q70_summary.csv")
+    sea = pd.read_csv(_TABLES / "sea_30q70_summary.csv")
     sea = sea.sort_values("30q70_2023").reset_index(drop=True)
     bar_colors = [LANCET_VIETNAM if c == "Vietnam" else LANCET_PEER
                   for c in sea["country"]]
@@ -1078,13 +1081,13 @@ def build_fig4_30q70_combined():
 
 def run():
     print("\n=== 06 FIGURES ===")
-    ensure_dirs()
+    ensure_dirs(_FIG_HTML, _FIG_STATIC, _TABLES)
 
-    df_burden = pd.read_csv(PROC / "burden_sea.csv")
-    df_yll_yld = pd.read_csv(PROC / "yll_yld_sea.csv")
-    metrics = pd.read_csv(TAB / "metrics.csv")
-    decomp = pd.read_csv(TAB / "decomposition_results.csv")
-    df_ratio = pd.read_csv(TAB / "sea_yll_yld_ratio.csv")
+    df_burden = pd.read_csv(SHARED_PROCESSED / "burden_sea.csv")
+    df_yll_yld = pd.read_csv(SHARED_PROCESSED / "yll_yld_sea.csv")
+    metrics = pd.read_csv(_TABLES / "metrics.csv")
+    decomp = pd.read_csv(_TABLES / "decomposition_results.csv")
+    df_ratio = pd.read_csv(_TABLES / "sea_yll_yld_ratio.csv")
 
     fig1_overview(df_burden, metrics)
     build_fig2_period_aapc()

@@ -20,19 +20,20 @@ References
   Lim SS et al. Lancet 2018;392:2091-138 (SDI-expected HAQ methodology)
 """
 
-import sys
 from pathlib import Path
-
-sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import numpy as np
 import pandas as pd
 
-from utils import (
-    PROC, TAB, SEA_COUNTRIES,
+from shared import (
+    SHARED_PROCESSED, SEA_COUNTRIES,
     CAUSE_GROUPS, MEASURE,
     ensure_dirs, joinpoint_aapc,
 )
+
+
+_PAPER_DIR = Path(__file__).resolve().parents[1]
+_TABLES = _PAPER_DIR / "tables"
 
 
 # GBD-native location_name -> short display name used in output tables.
@@ -59,11 +60,11 @@ def sdi_expected_ncd_share(sdi_vec, share_vec, focal_idx, deg=2):
 
 def run():
     print("\n=== 05 SEA COMPARISON ===")
-    ensure_dirs()
+    ensure_dirs(_TABLES)
 
-    metrics = pd.read_csv(TAB / "metrics.csv")  # per-country/year shares
-    sdi = pd.read_csv(PROC / "sdi_sea.csv")
-    df_yll_yld = pd.read_csv(PROC / "yll_yld_sea.csv")
+    metrics = pd.read_csv(_TABLES / "metrics.csv")  # per-country/year shares
+    sdi = pd.read_csv(SHARED_PROCESSED / "sdi_sea.csv")
+    df_yll_yld = pd.read_csv(SHARED_PROCESSED / "yll_yld_sea.csv")
 
     # ---- Snapshot NCD share per country at milestone years ----------------
     snapshot_years = [1990, 2000, 2010, 2023]
@@ -130,7 +131,7 @@ def run():
         "ncd_share_expected_2023", "obs_vs_expected_ratio_2023",
     ]
     sea = sea[col_order]
-    sea.to_csv(TAB / "sea_comparison.csv", index=False)
+    sea.to_csv(_TABLES / "sea_comparison.csv", index=False)
 
     # ---- YLL/YLD ratio 2023 (unchanged) -----------------------------------
     snap23 = df_yll_yld[
@@ -153,11 +154,11 @@ def run():
     df_ratio = (pd.DataFrame(rows)
                 .sort_values("ratio", ascending=False)
                 .reset_index(drop=True))
-    df_ratio.to_csv(TAB / "sea_yll_yld_ratio.csv", index=False)
+    df_ratio.to_csv(_TABLES / "sea_yll_yld_ratio.csv", index=False)
 
     # ---- SEA age-standardized NCD death rate 2023 (for Figure 10 proxy
     #      of 30q70 across countries, which isn't directly available) -------
-    burden = pd.read_csv(PROC / "burden_sea.csv")
+    burden = pd.read_csv(SHARED_PROCESSED / "burden_sea.csv")
     ncd_death_2023 = burden[
         (burden["measure_name"] == MEASURE["deaths"])
         & (burden["metric_name"] == "Rate")
@@ -172,7 +173,7 @@ def run():
     ncd_death_2023 = (ncd_death_2023.sort_values("ncd_death_rate_asr",
                                                  ascending=False)
                       .reset_index(drop=True))
-    ncd_death_2023.to_csv(TAB / "sea_ncd_death_rate_2023.csv", index=False)
+    ncd_death_2023.to_csv(_TABLES / "sea_ncd_death_rate_2023.csv", index=False)
 
     # ---- Print summary -----------------------------------------------------
     print("  SEA countries ranked by NCD share of total DALYs in 2023:")

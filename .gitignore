@@ -1,29 +1,38 @@
-# Data raw — IHME license, file nặng
-data/raw/
+# Raw data — IHME license, not redistributable; large
+raw_data/burden/*.csv
+raw_data/covariates/*.csv
+raw_data/covariates/*.XLSX
+raw_data/air_pollution/**/*.zip
+raw_data/air_pollution/**/*.csv
+!raw_data/**/README.md
+!raw_data/**/*.md
 
-# Generated outputs — tái tạo được từ scripts
-figures/html/
-figures/static/
+# Derived data — regenerable by running shared/pipeline/
+shared_processed/*.csv
+!shared_processed/README.md
 
-# Image binaries — build lại từ scripts/06_figures.py, không cần lên git
-*.png
-*.svg
-*.jpg
-*.jpeg
-*.gif
-*.webp
-*.pdf
+# Per-project data — regenerable by the paper's pipeline
+projects/*/data/*.csv
 
-# Word binaries — tái tạo từ md qua build_main_docx.py
-*.docx
+# Figure outputs — regenerate via each paper's figures script
+projects/*/figures/html/
+projects/*/figures/static/*.png
+projects/*/figures/static/*.svg
+
+# Manuscript binaries
+projects/*/manuscript/*.docx
 
 # Python
 __pycache__/
 *.pyc
 .venv/
 venv/
+*.egg-info/
+build/
+dist/
 
-# OS
+# Word lockfiles / OS cruft
+~$*
 .DS_Store
 Thumbs.db
 

@@ -33,19 +33,21 @@ References
   Krieger 1984. Clegg LX et al. Stat Med 2009;28:3670-82 (AAPC + CI).
 """
 
-import sys
 from pathlib import Path
-
-sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import numpy as np
 import pandas as pd
 from scipy import stats
 
-from utils import (
-    PROC, TAB, RAW, LOC_NORMALIZE, SEA_COUNTRIES,
+from shared import (
+    SHARED_PROCESSED, BURDEN_RAW,
+    LOC_NORMALIZE, SEA_COUNTRIES,
     ensure_dirs, joinpoint_aapc_pelt,
 )
+
+
+_PAPER_DIR = Path(__file__).resolve().parents[1]
+_TABLES = _PAPER_DIR / "tables"
 
 
 # Strict SDG 3.4.1 NCD cause list (GBD 2023 naming; diabetes is bundled
@@ -115,9 +117,9 @@ def _loglin_aapc(years, q_pct):
 
 def run():
     print("\n=== 07 SEA 30Q70 (strict SDG 3.4.1) ===")
-    ensure_dirs()
+    ensure_dirs(SHARED_PROCESSED, _TABLES)
 
-    df = pd.read_csv(RAW / "query6_30q70.csv")
+    df = pd.read_csv(BURDEN_RAW / "query6_30q70.csv")
     df["location_name"] = df["location_name"].replace(LOC_NORMALIZE)
 
     df = df[(df["measure_name"] == "Deaths")
@@ -179,10 +181,10 @@ def run():
     long_df_out = (pd.concat(long_rows, ignore_index=True)
                    [["country", "year", "age_name", "ncd_rate_per_100k", "q5"]]
                    .sort_values(["country", "year", "age_name"]))
-    long_df_out.to_csv(PROC / "sea_30q70.csv", index=False)
+    long_df_out.to_csv(SHARED_PROCESSED / "sea_30q70.csv", index=False)
 
     summary_df = pd.DataFrame(summary_rows)
-    summary_df.to_csv(TAB / "sea_30q70_summary.csv", index=False)
+    summary_df.to_csv(_TABLES / "sea_30q70_summary.csv", index=False)
 
     # ---- Verification ------------------------------------------------------
     vn = summary_df[summary_df["country"] == "Vietnam"].iloc[0]
@@ -208,8 +210,8 @@ def run():
     print(f"  |AAPC_loglin - AAPC_joinpoint| = {diff_loglin_jp:.3f} pp "
           f"({'within' if diff_loglin_jp <= 0.1 else 'exceeds'} 0.1 pp)")
 
-    print(f"  [ok] data/processed/sea_30q70.csv ({len(long_df_out)} rows)")
-    print(f"  [ok] tables/sea_30q70_summary.csv ({len(summary_df)} rows)")
+    print(f"  [ok] shared_processed/sea_30q70.csv ({len(long_df_out)} rows)")
+    print(f"  [ok] projects/01/tables/sea_30q70_summary.csv ({len(summary_df)} rows)")
     return dict(summary=summary_df, long=long_df_out)
 
 

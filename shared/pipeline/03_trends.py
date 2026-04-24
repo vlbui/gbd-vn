@@ -5,26 +5,24 @@ decades 1990-2000, 2000-2010, 2010-2023. Output columns:
 
     cause, period, aapc, ci_low, ci_high, p_value, n_obs
 
-Saved to tables/trend_results.csv.
+Saved to projects/01_epi_transition/tables/trend_results.csv.
 """
-
-import sys
-from pathlib import Path
-
-sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import pandas as pd
 
-from utils import (
-    PROC, TAB, ensure_dirs,
+from shared import (
+    SHARED_PROCESSED, PROJECTS, ensure_dirs,
     CAUSE_GROUPS, CAUSE_SHORT, MEASURE,
     get_asr, calculate_aapc, joinpoint_aapc,
 )
 
+
+_PAPER_01_TABLES = PROJECTS / "01_epi_transition" / "tables"
+
 # Sub-periods use single-segment log-linear AAPC (Clegg 2009 log-linear
-# case) because ~10 yearly points per decade are too few for joinpoint
-# BIC selection to be meaningful. The full 1990-2023 row uses joinpoint
-# AAPC (ruptures + BIC + delta-method CI) so it matches Table 1.
+# case) — ~10 yearly points per decade are too few for joinpoint BIC
+# selection to be meaningful. The full 1990-2023 row uses joinpoint AAPC
+# so it matches Table 1.
 PERIODS = [
     ("1990-2023", 1990, 2023, joinpoint_aapc),
     ("1990-2000", 1990, 2000, calculate_aapc),
@@ -34,7 +32,6 @@ PERIODS = [
 
 
 def _aapc_rows(subset, label):
-    """Run AAPC over all PERIODS for a year-indexed Series-like frame."""
     rows = []
     subset = subset.sort_values("year")
     for period_name, y0, y1, fn in PERIODS:
@@ -50,12 +47,11 @@ def _aapc_rows(subset, label):
 
 def run():
     print("\n=== 03 TRENDS ===")
-    ensure_dirs()
+    ensure_dirs(_PAPER_01_TABLES)
 
-    df_burden = pd.read_csv(PROC / "burden_sea.csv")
-    df_yll_yld = pd.read_csv(PROC / "yll_yld_sea.csv")
+    df_burden = pd.read_csv(SHARED_PROCESSED / "burden_sea.csv")
+    df_yll_yld = pd.read_csv(SHARED_PROCESSED / "yll_yld_sea.csv")
 
-    # Vietnam, age-std DALY rate, Both sex, level-1 cause groups.
     vn_asr = get_asr(df_burden[df_burden["location_name"] == "Vietnam"])
     vn_asr = vn_asr[(vn_asr["measure_name"] == MEASURE["daly"])
                     & (vn_asr["metric_name"] == "Rate")
@@ -68,7 +64,6 @@ def run():
         sub = vn_asr[vn_asr["cause_name"] == full_name]
         results.extend(_aapc_rows(sub, f"DALY - {short}"))
 
-    # Vietnam YLL / YLD age-std rate, Both sex, all-cause.
     vn_yy = df_yll_yld[
         (df_yll_yld["location_name"] == "Vietnam")
         & (df_yll_yld["age_name"] == "Age-standardized")
@@ -84,9 +79,8 @@ def run():
     df_results[["aapc", "ci_low", "ci_high"]] = \
         df_results[["aapc", "ci_low", "ci_high"]].round(3)
     df_results["p_value"] = df_results["p_value"].round(6)
-    df_results.to_csv(TAB / "trend_results.csv", index=False)
+    df_results.to_csv(_PAPER_01_TABLES / "trend_results.csv", index=False)
 
-    # Print the full-period AAPC block
     full = df_results[df_results["period"] == "1990-2023"]
     print("  Vietnam AAPC 1990-2023:")
     for _, r in full.iterrows():
@@ -94,7 +88,7 @@ def run():
               f"AAPC = {r['aapc']:+.2f}% "
               f"(95% CI {r['ci_low']:+.2f}, {r['ci_high']:+.2f}; "
               f"p={r['p_value']:.2g})")
-    print(f"  [ok] tables/trend_results.csv ({len(df_results)} rows)")
+    print(f"  [ok] projects/01/tables/trend_results.csv ({len(df_results)} rows)")
     return df_results
 
 

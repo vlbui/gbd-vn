@@ -6,16 +6,16 @@ Splits the change in total DALYs into three components:
 Applied separately to CMNN (decrease) and NCD (increase).
 """
 
-import sys
-from pathlib import Path
-
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-
 import numpy as np
 import pandas as pd
 
-from utils import PROC, TAB, ensure_dirs, CAUSE_GROUPS, MEASURE
+from shared import (
+    SHARED_PROCESSED, PROJECTS, ensure_dirs,
+    CAUSE_GROUPS, MEASURE,
+)
 
+
+_PAPER_01_TABLES = PROJECTS / "01_epi_transition" / "tables"
 
 AGE_GROUPS = [
     "<5 years", "5-9 years", "10-14 years", "15-19 years", "20-24 years",
@@ -53,12 +53,11 @@ def das_gupta(pop_t0, rate_t0, pop_t1, rate_t1):
 
 def run():
     print("\n=== 04 DECOMPOSITION ===")
-    ensure_dirs()
+    ensure_dirs(_PAPER_01_TABLES)
 
-    df_age = pd.read_csv(PROC / "age_specific.csv")
-    df_pop = pd.read_csv(PROC / "population.csv")
+    df_age = pd.read_csv(SHARED_PROCESSED / "age_specific.csv")
+    df_pop = pd.read_csv(SHARED_PROCESSED / "population.csv")
 
-    # Vietnam population, Both sex, the 17 age groups used for standardization.
     pop = df_pop[
         (df_pop["sex_name"] == "Both")
         & (df_pop["age_name"].isin(AGE_GROUPS))
@@ -68,7 +67,6 @@ def run():
         index="age_name", columns="year", values="val",
     ).reindex(AGE_GROUPS)
 
-    # Age-specific DALY rates per 100k.
     daly = df_age[
         (df_age["measure_name"] == MEASURE["daly"])
         & (df_age["metric_name"] == "Rate")
@@ -82,7 +80,6 @@ def run():
         rate_wide = sub.pivot_table(
             index="age_name", columns="year", values="val",
         ).reindex(AGE_GROUPS)
-        # Convert per-100k to per-person
         r0 = (rate_wide[1990] / 1e5).values
         r1 = (rate_wide[2023] / 1e5).values
         p0 = pop_wide[1990].values
@@ -91,13 +88,13 @@ def run():
 
     tbl = pd.DataFrame(rows)
     tbl["direction"] = np.where(tbl["observed_change"] >= 0, "increase", "decrease")
-    tbl.to_csv(TAB / "decomposition_results.csv", index=False)
+    tbl.to_csv(_PAPER_01_TABLES / "decomposition_results.csv", index=False)
 
     print("  Observed vs decomposed DALY change, Vietnam:")
     show = tbl[["cause_group", "pop_size", "age_structure",
                 "age_rate", "total_decomp", "observed_change", "direction"]]
     print(show.to_string(index=False, float_format="%.0f"))
-    print("  [ok] tables/decomposition_results.csv")
+    print("  [ok] projects/01/tables/decomposition_results.csv")
     return tbl
 
 
